@@ -37,6 +37,91 @@ func main() {
 	}
 }
 
+func handleConnection(err error, connection net.Conn) {
+	request := make([]byte, 1024)
+	_, err = connection.Read(request)
+
+	httpRequest := parseHttpRequest(request)
+	//fmt.Printf("httpRequest--Data: ---------->>> %v\n\n", httpRequest)
+
+	switch httpRequest.StartLine.HttpMethod {
+	case "GET":
+		{
+			if httpRequest.StartLine.Path == "/" {
+				connection.Write([]byte(("HTTP/1.1 200 OK\r\n\r\n")))
+			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/echo/") {
+				res := echoResponse(httpRequest.StartLine.Path)
+				connection.Write(res)
+			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/user-agent") {
+				res := userAgent(httpRequest)
+				connection.Write(res)
+			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
+				var res = handleFileRead(os.Args[2], httpRequest.StartLine.Path)
+				connection.Write(res)
+			} else {
+				connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
+			}
+		}
+	case "POST":
+		{
+			if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
+				filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(httpRequest.StartLine.Path, "/files/"))
+				var res = handleFileCreation(filePathAbs, httpRequest)
+				connection.Write(res)
+			} else {
+				connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
+			}
+		}
+
+	}
+
+	connection.Close()
+}
+
+func handleFileCreation(filePathAbs string, httpRequest HttpRequest) []byte {
+	err := os.WriteFile(filePathAbs, httpRequest.Content, os.ModePerm)
+	handleErr(err)
+
+	return []byte("HTTP/1.1 201 CREATED\r\n\r\n")
+}
+
+func handleFileRead(directory string, httpPath string) []byte {
+	filePath := strings.TrimPrefix(httpPath, "/files/")
+	filePathAbs := path.Join(directory, filePath)
+	fileContent, err := os.ReadFile(filePathAbs)
+	if err != nil {
+		fmt.Println("error occurred: ", err.Error())
+		return []byte("HTTP/1.1 404 NOT FOUND\r\n\r\n")
+	}
+
+	return make200ResponseBytes(fileContent, "application/octet-stream")
+}
+
+func userAgent(httpRequest HttpRequest) []byte {
+	// skip 0 - it is start line
+	if val, ok := httpRequest.Headers[UserAgent]; ok {
+		return make200ResponseBytes([]byte(val), "text/plain")
+	}
+	return []byte{}
+}
+
+func echoResponse(path string) []byte {
+	content := strings.TrimPrefix(path, "/echo/")
+	return make200ResponseBytes([]byte(content), "text/plain")
+}
+
+func make200ResponseBytes(content []byte, contentType string) []byte {
+	response := make([][]byte, 5)
+
+	response[0] = []byte("HTTP/1.1 200 OK")
+	response[1] = []byte(fmt.Sprintf("Content-Type: %s", contentType))
+	response[2] = []byte(fmt.Sprintf("Content-Length: %d", len(content)))
+	response[3] = []byte(CONTENT_SEPARATOR)
+	response[4] = content
+
+	return bytes.Join(response, []byte(LINE_SEPARATOR))
+}
+
 const (
 	Host           = "Host"
 	UserAgent      = "User-Agent"
@@ -76,108 +161,6 @@ func parseHttpRequest(request []byte) HttpRequest {
 	}
 }
 
-func parseHeaders(requestData [][]byte) map[string]string {
-	headers := make(map[string]string)
-	for i := 0; i < len(requestData); i++ {
-		println("parseHeaders " + string(requestData[i]))
-		header := bytes.Split(requestData[i], []byte(": "))
-		headers[string(header[0])] = string(header[1])
-	}
-
-	return headers
-}
-
-func handleConnection(err error, connection net.Conn) {
-	// process request
-
-	// content length needs to be exact
-	// cannot be 1024
-	request := make([]byte, 1024)
-	_, err = connection.Read(request)
-
-	httpRequest := parseHttpRequest(request)
-	fmt.Printf("httpRequest--Data: ---------->>> %v\n\n", httpRequest)
-
-	switch httpRequest.StartLine.HttpMethod {
-	case "GET":
-		{
-			if httpRequest.StartLine.Path == "/" {
-				connection.Write([]byte(("HTTP/1.1 200 OK\r\n\r\n")))
-			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/echo/") {
-				res := echoResponse(httpRequest.StartLine.Path)
-				connection.Write(res)
-			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/user-agent") {
-				res := userAgent(httpRequest)
-				connection.Write(res)
-			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
-				var res = handleFileRead(os.Args[2], httpRequest.StartLine.Path)
-				connection.Write(res)
-			} else {
-				connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
-			}
-		}
-	case "POST":
-		{
-			if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
-				filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(httpRequest.StartLine.Path, "/files/"))
-				var res = handleFileCreation(filePathAbs, httpRequest)
-				connection.Write(res)
-			} else {
-				connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
-			}
-		}
-
-	}
-
-	connection.Close()
-}
-
-func handleFileCreation(filePathAbs string, httpRequest HttpRequest) []byte {
-	fmt.Printf("File Creation Path: [%s] -- data size [%d] \n", filePathAbs, len(httpRequest.Content))
-	err := os.WriteFile(filePathAbs, httpRequest.Content, os.ModePerm)
-	handleErr(err)
-
-	return []byte("HTTP/1.1 201 CREATED\r\n\r\n")
-}
-
-func handleFileRead(directory string, httpPath string) []byte {
-	filePath := strings.TrimPrefix(httpPath, "/files/")
-	filePathAbs := path.Join(directory, filePath)
-	fmt.Println("File Read Path: [%s]", filePathAbs)
-	fileContent, err := os.ReadFile(filePathAbs)
-	if err != nil {
-		fmt.Println("error occurred: ", err.Error())
-		return []byte("HTTP/1.1 404 NOT FOUND\r\n\r\n")
-	}
-
-	return make200ResponseBytes(fileContent, "application/octet-stream")
-}
-
-func userAgent(httpRequest HttpRequest) []byte {
-	// skip 0 - it is start line
-	if val, ok := httpRequest.Headers[UserAgent]; ok {
-		return make200ResponseBytes([]byte(val), "text/plain")
-	}
-	return []byte{}
-}
-
-func echoResponse(path string) []byte {
-	content := strings.TrimPrefix(path, "/echo/")
-	return make200ResponseBytes([]byte(content), "text/plain")
-}
-
-func make200ResponseBytes(content []byte, contentType string) []byte {
-	response := make([][]byte, 5)
-
-	response[0] = []byte("HTTP/1.1 200 OK")
-	response[1] = []byte(fmt.Sprintf("Content-Type: %s", contentType))
-	response[2] = []byte(fmt.Sprintf("Content-Length: %d", len(content)))
-	response[3] = []byte(CONTENT_SEPARATOR)
-	response[4] = content
-
-	return bytes.Join(response, []byte(LINE_SEPARATOR))
-}
-
 func parseStartLine(line []byte) StartLine {
 	items := strings.Split(string(line), " ")
 	if len(items) != 3 {
@@ -188,6 +171,17 @@ func parseStartLine(line []byte) StartLine {
 		Path:        items[1],
 		HttpVersion: items[2],
 	}
+}
+
+func parseHeaders(requestData [][]byte) map[string]string {
+	headers := make(map[string]string)
+	for i := 0; i < len(requestData); i++ {
+		println("parseHeaders " + string(requestData[i]))
+		header := bytes.Split(requestData[i], []byte(": "))
+		headers[string(header[0])] = string(header[1])
+	}
+
+	return headers
 }
 
 type HttpRequest struct {
