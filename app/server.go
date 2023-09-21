@@ -94,38 +94,6 @@ func handleConnection(err error, connection net.Conn) {
 	response := dispatch(httpRequest)
 
 	connection.Write(response)
-
-	//switch httpRequest.StartLine.HttpMethod {
-	//case "GET":
-	//	{
-	//		if httpRequest.StartLine.Path == "/" {
-	//			connection.Write([]byte(("HTTP/1.1 200 OK\r\n\r\n")))
-	//		} else if strings.HasPrefix(httpRequest.StartLine.Path, "/echo/") {
-	//			res := echoResponse(httpRequest.StartLine.Path)
-	//			connection.Write(res)
-	//		} else if strings.HasPrefix(httpRequest.StartLine.Path, "/user-agent") {
-	//			res := userAgent(httpRequest)
-	//			connection.Write(res)
-	//		} else if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
-	//			var res = handleFileRead(os.Args[2], httpRequest.StartLine.Path)
-	//			connection.Write(res)
-	//		} else {
-	//			connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
-	//		}
-	//	}
-	//case "POST":
-	//	{
-	//		if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
-	//			filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(httpRequest.StartLine.Path, "/files/"))
-	//			var res = handleFileCreation(filePathAbs, httpRequest)
-	//			connection.Write(res)
-	//		} else {
-	//			connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
-	//		}
-	//	}
-	//
-	//}
-
 }
 
 func handleFileCreation(httpRequest HttpRequest) []byte {
