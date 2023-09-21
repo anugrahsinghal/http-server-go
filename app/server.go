@@ -34,17 +34,20 @@ func main() {
 		_, err = connection.Read(request)
 		requestData := string(request)
 		fmt.Printf("Data: \n%s", requestData)
-		splitData := strings.Split(requestData, "\r\n")
-		for i, datum := range splitData {
+		httpData := strings.Split(requestData, "\r\n")
+		for i, datum := range httpData {
 			fmt.Printf("i=%v -- Data: %v----\n", i, datum)
 		}
 
-		startLine := parseStartLine(splitData[0])
+		startLine := parseStartLine(httpData[0])
 
 		if startLine.Path == "/" {
 			connection.Write([]byte(("HTTP/1.1 200 OK\r\n\r\n")))
-		} else if strings.HasPrefix(startLine.Path, "/echo") {
+		} else if strings.HasPrefix(startLine.Path, "/echo/") {
 			res := echoResponse(startLine.Path)
+			connection.Write([]byte((res)))
+		} else if strings.HasPrefix(startLine.Path, "/user-agent") {
+			res := userAgent(httpData)
 			connection.Write([]byte((res)))
 		} else {
 			connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
@@ -54,12 +57,26 @@ func main() {
 	}
 }
 
+func userAgent(httpData []string) string {
+	// skip 0 - it is start line
+	for i := 1; i < len(httpData); i++ {
+		if ok := strings.HasPrefix(httpData[i], "User-Agent:"); ok {
+			return make200Response(strings.TrimPrefix(httpData[i], "User-Agent: "), "text/plain")
+		}
+	}
+	return ""
+}
+
 func echoResponse(path string) string {
 	content := strings.TrimPrefix(path, "/echo/")
+	return make200Response(content, "text/plain")
+}
+
+func make200Response(content string, contentType string) string {
 	response := make([]string, 5)
 
 	response[0] = "HTTP/1.1 200 OK"
-	response[1] = "Content-Type: text/plain"
+	response[1] = fmt.Sprintf("Content-Type: %s", contentType)
 	response[2] = fmt.Sprintf("Content-Length: %d", len(content))
 	response[3] = CONTENT_SEPARATOR
 	response[4] = content
