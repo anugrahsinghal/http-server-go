@@ -6,9 +6,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	// Uncomment this block to pass the first stage
-	// "net"
-	// "os"
 )
 
 func main() {
