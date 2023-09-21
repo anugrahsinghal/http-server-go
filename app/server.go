@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
@@ -57,8 +58,14 @@ func handleConnection(err error, connection net.Conn) {
 		res := userAgent(httpData)
 		connection.Write([]byte((res)))
 	} else if strings.HasPrefix(startLine.Path, "/files/") {
-		var res = handleFiles(os.Args[2], startLine.Path)
-		connection.Write([]byte((res)))
+		if startLine.HttpMethod == "GET" {
+			var res = handleFileRead(os.Args[2], startLine.Path)
+			connection.Write([]byte((res)))
+		} else if startLine.HttpMethod == "POST" {
+			filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(startLine.Path, "/files/"))
+			var res = handleFileCreation(filePathAbs, httpData)
+			connection.Write([]byte((res)))
+		}
 	} else {
 		connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
 	}
@@ -66,21 +73,25 @@ func handleConnection(err error, connection net.Conn) {
 	connection.Close()
 }
 
-func handleFiles(directory string, httpPath string) string {
+func handleFileCreation(filePathAbs string, httpData []string) string {
+	file, err := os.OpenFile(filePathAbs, os.O_CREATE, os.ModePerm)
+	handleErr(err)
+	writer := bufio.NewWriter(file)
+	_, err = writer.Write([]byte(httpData[7]))
+	handleErr(err)
+	err = writer.Flush()
+	handleErr(err)
+
+	return "HTTP/1.1 201 CREATED\r\n\r\n"
+}
+
+func handleFileRead(directory string, httpPath string) string {
 	filePath := strings.TrimPrefix(httpPath, "/files/")
-	filePathAbs := path.Join(directory, filePath)
-	fileContent, err := os.ReadFile(filePathAbs)
-	//file, err := os.OpenFile(filePathAbs, os.O_RDONLY, os.ModePerm)
+	fileContent, err := os.ReadFile(path.Join(directory, filePath))
 	if err != nil {
 		fmt.Println("error occurred: ", err.Error())
 		return "HTTP/1.1 404 NOT FOUND\r\n\r\n"
 	}
-
-	//fileBuffer := bufio.NewReader(file)
-	//fileSize := fileBuffer.Size()
-	//fileContent := make([]byte, fileSize)
-	//_, err = io.ReadFull(fileBuffer, fileContent)
-	//handleErr(err)
 
 	return make200Response(string(fileContent), "application/octet-stream")
 }
