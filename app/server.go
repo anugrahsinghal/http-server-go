@@ -43,9 +43,6 @@ func handleConnection(err error, connection net.Conn) {
 	requestData := string(request)
 	fmt.Printf("Data: \n%s", requestData)
 	httpData := strings.Split(requestData, "\r\n")
-	for i, datum := range httpData {
-		fmt.Printf("i=%v -- Data: %v----\n", i, datum)
-	}
 
 	startLine := parseStartLine(httpData[0])
 
