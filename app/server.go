@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"strings"
 	// Uncomment this block to pass the first stage
 	// "net"
@@ -13,7 +14,8 @@ import (
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
-	fmt.Println("Logs from your program will appear here!")
+	fmt.Printf("Logs from your program will appear here! %v, %v\n", len(os.Args), os.Args)
+	fmt.Println(os.Args)
 
 	// Uncomment this block to pass the first stage
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
@@ -54,11 +56,33 @@ func handleConnection(err error, connection net.Conn) {
 	} else if strings.HasPrefix(startLine.Path, "/user-agent") {
 		res := userAgent(httpData)
 		connection.Write([]byte((res)))
+	} else if strings.HasPrefix(startLine.Path, "/files/") {
+		var res = handleFiles(os.Args[2], startLine.Path)
+		connection.Write([]byte((res)))
 	} else {
 		connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
 	}
 
 	connection.Close()
+}
+
+func handleFiles(directory string, httpPath string) string {
+	filePath := strings.TrimPrefix(httpPath, "/files/")
+	filePathAbs := path.Join(directory, filePath)
+	fileContent, err := os.ReadFile(filePathAbs)
+	//file, err := os.OpenFile(filePathAbs, os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		fmt.Println("error occurred: ", err.Error())
+		return "HTTP/1.1 404 NOT FOUND\r\n\r\n"
+	}
+
+	//fileBuffer := bufio.NewReader(file)
+	//fileSize := fileBuffer.Size()
+	//fileContent := make([]byte, fileSize)
+	//_, err = io.ReadFull(fileBuffer, fileContent)
+	//handleErr(err)
+
+	return make200Response(string(fileContent), "application/octet-stream")
 }
 
 func userAgent(httpData []string) string {
