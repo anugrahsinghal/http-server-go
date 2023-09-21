@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -12,6 +13,10 @@ import (
 	// Uncomment this block to pass the first stage
 	// "net"
 	// "os"
+)
+
+var (
+	HTTP_METHOD_PATHS = make(map[string]map[string]func(httpRequest HttpRequest) []byte)
 )
 
 func main() {
@@ -26,6 +31,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	registerPaths()
+
 	for {
 		connection, err := l.Accept()
 		if err != nil {
@@ -37,57 +44,101 @@ func main() {
 	}
 }
 
+func registerPaths() {
+	register("GET", "/echo/", echoResponse)
+	register("GET", "/user-agent", userAgent)
+	register("GET", "/files/", handleFileRead)
+	register("POST", "/files/", handleFileCreation)
+}
+
+func register(method string, path string, function func(httpRequest HttpRequest) []byte) {
+	if HTTP_METHOD_PATHS[method] == nil {
+		HTTP_METHOD_PATHS[method] = make(map[string]func(httpRequest HttpRequest) []byte)
+	}
+	HTTP_METHOD_PATHS[method][path] = function
+}
+
+func getDispatch(httpRequest HttpRequest) (func(httpRequest HttpRequest) []byte, error) {
+	fmt.Printf("All Paths:: %v\n", HTTP_METHOD_PATHS[httpRequest.StartLine.HttpMethod])
+	for registeredPrefix, dispatch := range HTTP_METHOD_PATHS[httpRequest.StartLine.HttpMethod] {
+		fmt.Printf("Compare Registered Path %s to %s \n", registeredPrefix, httpRequest.StartLine.Path)
+		// not exactly correct - because we want best match
+		if strings.HasPrefix(httpRequest.StartLine.Path, registeredPrefix) { // reg-prefix=/files/ - path=/ - /files/ has /
+			fmt.Println("Dispatch to : " + registeredPrefix)
+			return dispatch, nil
+		}
+	}
+	return nil, errors.New("Path Not Found")
+}
+
 func handleConnection(err error, connection net.Conn) {
 	request := make([]byte, 1024)
 	_, err = connection.Read(request)
+	defer connection.Close()
 
 	httpRequest := parseHttpRequest(request)
-	//fmt.Printf("httpRequest--Data: ---------->>> %v\n\n", httpRequest)
+	fmt.Printf("httpRequest--Data: ---------->>> %v\n\n", httpRequest)
 
-	switch httpRequest.StartLine.HttpMethod {
-	case "GET":
-		{
-			if httpRequest.StartLine.Path == "/" {
-				connection.Write([]byte(("HTTP/1.1 200 OK\r\n\r\n")))
-			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/echo/") {
-				res := echoResponse(httpRequest.StartLine.Path)
-				connection.Write(res)
-			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/user-agent") {
-				res := userAgent(httpRequest)
-				connection.Write(res)
-			} else if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
-				var res = handleFileRead(os.Args[2], httpRequest.StartLine.Path)
-				connection.Write(res)
-			} else {
-				connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
-			}
-		}
-	case "POST":
-		{
-			if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
-				filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(httpRequest.StartLine.Path, "/files/"))
-				var res = handleFileCreation(filePathAbs, httpRequest)
-				connection.Write(res)
-			} else {
-				connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
-			}
-		}
-
+	if "/" == httpRequest.StartLine.Path { // reg-prefix=/files/ - path=/ - /files/ has /
+		connection.Write([]byte(("HTTP/1.1 200 OK\r\n\r\n")))
+		return
 	}
 
-	connection.Close()
+	dispatch, err := getDispatch(httpRequest)
+	if err != nil {
+		fmt.Println("Dispatch error occurred: ", err.Error())
+		connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
+		return
+	}
+
+	response := dispatch(httpRequest)
+
+	connection.Write(response)
+
+	//switch httpRequest.StartLine.HttpMethod {
+	//case "GET":
+	//	{
+	//		if httpRequest.StartLine.Path == "/" {
+	//			connection.Write([]byte(("HTTP/1.1 200 OK\r\n\r\n")))
+	//		} else if strings.HasPrefix(httpRequest.StartLine.Path, "/echo/") {
+	//			res := echoResponse(httpRequest.StartLine.Path)
+	//			connection.Write(res)
+	//		} else if strings.HasPrefix(httpRequest.StartLine.Path, "/user-agent") {
+	//			res := userAgent(httpRequest)
+	//			connection.Write(res)
+	//		} else if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
+	//			var res = handleFileRead(os.Args[2], httpRequest.StartLine.Path)
+	//			connection.Write(res)
+	//		} else {
+	//			connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
+	//		}
+	//	}
+	//case "POST":
+	//	{
+	//		if strings.HasPrefix(httpRequest.StartLine.Path, "/files/") {
+	//			filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(httpRequest.StartLine.Path, "/files/"))
+	//			var res = handleFileCreation(filePathAbs, httpRequest)
+	//			connection.Write(res)
+	//		} else {
+	//			connection.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
+	//		}
+	//	}
+	//
+	//}
+
 }
 
-func handleFileCreation(filePathAbs string, httpRequest HttpRequest) []byte {
+func handleFileCreation(httpRequest HttpRequest) []byte {
+	filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(httpRequest.StartLine.Path, "/files/"))
 	err := os.WriteFile(filePathAbs, httpRequest.Content, os.ModePerm)
 	handleErr(err)
 
 	return []byte("HTTP/1.1 201 CREATED\r\n\r\n")
 }
 
-func handleFileRead(directory string, httpPath string) []byte {
-	filePath := strings.TrimPrefix(httpPath, "/files/")
-	filePathAbs := path.Join(directory, filePath)
+func handleFileRead(httpRequest HttpRequest) []byte {
+	filePath := strings.TrimPrefix(httpRequest.StartLine.Path, "/files/")
+	filePathAbs := path.Join(os.Args[2], filePath)
 	fileContent, err := os.ReadFile(filePathAbs)
 	if err != nil {
 		fmt.Println("error occurred: ", err.Error())
@@ -105,8 +156,8 @@ func userAgent(httpRequest HttpRequest) []byte {
 	return []byte{}
 }
 
-func echoResponse(path string) []byte {
-	content := strings.TrimPrefix(path, "/echo/")
+func echoResponse(httpRequest HttpRequest) []byte {
+	content := strings.TrimPrefix(httpRequest.StartLine.Path, "/echo/")
 	return make200ResponseBytes([]byte(content), "text/plain")
 }
 
