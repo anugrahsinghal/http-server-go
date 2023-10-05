@@ -9,11 +9,8 @@ import (
 )
 
 func main() {
-	// You can use print statements as follows for debugging, they'll be visible when running tests.
 	log.Printf("Logs from your program will appear here! %v, %v\n", len(os.Args), os.Args)
-	log.Println(os.Args)
 
-	// Uncomment this block to pass the first stage
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		log.Println("Failed to bind to port 4221")
@@ -34,10 +31,10 @@ func main() {
 }
 
 func registerPaths() {
-	register("GET", "/echo/", echoResponse)
-	register("GET", "/user-agent", userAgent)
-	register("GET", "/files/", handleFileRead)
-	register("POST", "/files/", handleFileCreation)
+	registerHttpDispatch("GET", "/echo/", echoResponse)
+	registerHttpDispatch("GET", "/user-agent", userAgent)
+	registerHttpDispatch("GET", "/files/", handleFileRead)
+	registerHttpDispatch("POST", "/files/", handleFileCreation)
 }
 
 func handleConnection(conn net.Conn) {
@@ -77,19 +74,32 @@ func handleFileRead(httpRequest HttpRequest) []byte {
 		return []byte("HTTP/1.1 404 NOT FOUND\r\n\r\n")
 	}
 
-	return makeSuccessResponse(fileContent, "application/octet-stream")
+	return HttpResponse{
+		ResponseCode: 200,
+		Headers:      map[Header]string{ContentType: "application/octet-stream"},
+		Content:      fileContent,
+	}.build()
 }
 
 func userAgent(httpRequest HttpRequest) []byte {
 	if _, ok := httpRequest.Headers[UserAgent]; !ok {
 		return []byte{}
 	}
-	return makeSuccessResponse([]byte(httpRequest.Headers[UserAgent]), "text/plain")
+
+	return HttpResponse{
+		ResponseCode: 200,
+		Headers:      map[Header]string{ContentType: "text/plain"},
+		Content:      []byte(httpRequest.Headers[UserAgent]),
+	}.build()
 }
 
 func echoResponse(httpRequest HttpRequest) []byte {
 	content := strings.TrimPrefix(httpRequest.StartLine.Path, "/echo/")
-	return makeSuccessResponse([]byte(content), "text/plain")
+	return HttpResponse{
+		ResponseCode: 200,
+		Headers:      map[Header]string{ContentType: "text/plain"},
+		Content:      []byte(content),
+	}.build()
 }
 
 func handleErr(err error) {

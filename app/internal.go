@@ -9,25 +9,33 @@ import (
 	"strings"
 )
 
+type Header string
+
 const (
-	Host             = "Host"
-	UserAgent        = "User-Agent"
-	AcceptEncoding   = "Accept-Encoding"
-	ContentType      = "Content-Type"
-	ContentLength    = "Content-Length"
+	Host           = Header("Host")
+	UserAgent      = Header("User-Agent")
+	AcceptEncoding = Header("Accept-Encoding")
+	ContentType    = Header("Content-Type")
+	ContentLength  = Header("Content-Length")
+)
+const (
 	LineSeparator    = "\r\n"
 	ContentSeparator = ""
 )
 
 var (
-	HTTP_METHOD_PATHS = make(map[string]map[string]func(httpRequest HttpRequest) []byte)
-	KNOWN_HEADERS     = []string{Host, UserAgent, AcceptEncoding, ContentType, ContentLength}
+	HTTP_METHOD_PATHS = map[string]map[string]func(httpRequest HttpRequest) []byte{
+		"GET":  make(map[string]func(httpRequest HttpRequest) []byte),
+		"POST": make(map[string]func(httpRequest HttpRequest) []byte),
+	}
+	RES_CODE_TO_STATEMENT = map[int]string{
+		200: "OK",
+		201: "CREATED",
+	}
+	KNOWN_HEADERS = []Header{Host, UserAgent, AcceptEncoding, ContentType, ContentLength}
 )
 
-func register(method string, pathPrefix string, function func(httpRequest HttpRequest) []byte) {
-	if HTTP_METHOD_PATHS[method] == nil {
-		HTTP_METHOD_PATHS[method] = make(map[string]func(httpRequest HttpRequest) []byte)
-	}
+func registerHttpDispatch(method string, pathPrefix string, function func(httpRequest HttpRequest) []byte) {
 	if _, ok := HTTP_METHOD_PATHS[method][pathPrefix]; ok {
 		panic("CANNOT REGISTER ALREADY REGISTERED PATH FOR METHOD " + method)
 	}
@@ -93,32 +101,57 @@ func parseStartLine(line []byte) StartLine {
 	}
 }
 
-func parseHeaders(requestData [][]byte) map[string]string {
-	headers := make(map[string]string)
+func parseHeaders(requestData [][]byte) map[Header]string {
+	headers := make(map[Header]string)
 	for i := 0; i < len(requestData); i++ {
 		log.Println("parseHeaders " + string(requestData[i]))
 		header := bytes.Split(requestData[i], []byte(": "))
-		headers[string(header[0])] = string(header[1])
+		headers[Header(header[0])] = string(header[1])
 	}
 
 	return headers
 }
 
-func makeSuccessResponse(content []byte, contentType string) []byte {
-	response := make([][]byte, 5)
+func (res HttpResponse) build() []byte {
+	headers := res.formatHeaders()
 
-	response[0] = []byte("HTTP/1.1 200 OK")
-	response[1] = []byte(fmt.Sprintf("Content-Type: %s", contentType))
-	response[2] = []byte(fmt.Sprintf("Content-Length: %d", len(content)))
-	response[3] = []byte(ContentSeparator)
-	response[4] = content
+	var response [][]byte
 
-	return bytes.Join(response, []byte(LineSeparator))
+	response = append(response, []byte(fmt.Sprintf("HTTP/1.1 %d %s", res.ResponseCode, RES_CODE_TO_STATEMENT[res.ResponseCode])))
+	response = append(response, headers...)
+	response = append(response, []byte(ContentSeparator))
+	response = append(response, res.Content)
+
+	join := bytes.Join(response, []byte(LineSeparator))
+
+	fmt.Printf("Response: %s\n", string(join))
+
+	return join
+}
+
+func (res HttpResponse) formatHeaders() [][]byte { // assuming res is of type response
+	var headers [][]byte
+
+	for header, value := range res.Headers {
+		if strings.EqualFold(string(header), string(ContentLength)) {
+			continue // ignore content length header
+		}
+		headers = append(headers, []byte(fmt.Sprintf("%s: %s", header, value)))
+	}
+
+	headers = append(headers, []byte(fmt.Sprintf("%s: %d", ContentLength, len(res.Content))))
+	return headers
+}
+
+type HttpResponse struct {
+	ResponseCode int
+	Headers      map[Header]string
+	Content      []byte
 }
 
 type HttpRequest struct {
 	StartLine StartLine
-	Headers   map[string]string
+	Headers   map[Header]string
 	Content   []byte
 }
 
