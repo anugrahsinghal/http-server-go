@@ -56,7 +56,6 @@ func handleConnection(conn net.Conn) {
 	if err != nil {
 		log.Println("Dispatch error occurred: ", err.Error())
 		response = HttpResponse{StatusCode: 404}
-		return
 	} else {
 		response = dispatch.Handle(httpRequest)
 	}
