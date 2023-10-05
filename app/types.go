@@ -4,9 +4,9 @@ type Header string
 type HttpMethod string
 
 type HttpResponse struct {
-	ResponseCode int
-	Headers      map[Header]string
-	Content      []byte
+	StatusCode int
+	Headers    map[Header]string
+	Content    []byte
 }
 
 type HttpRequest struct {
@@ -46,7 +46,7 @@ var (
 		GET:  make(map[string]HttpHandler),
 		POST: make(map[string]HttpHandler),
 	}
-	RES_CODE_TO_STATEMENT = map[int]string{
+	STATUS_CODE_TO_MESSAGE = map[int]string{
 		200: "OK",
 		201: "CREATED",
 		404: "NOT FOUND",

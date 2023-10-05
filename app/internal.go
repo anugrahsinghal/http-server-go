@@ -12,7 +12,7 @@ import (
 type DefaultHandler struct{}
 
 func (h DefaultHandler) Handle(HttpRequest) HttpResponse {
-	return HttpResponse{ResponseCode: 200}
+	return HttpResponse{StatusCode: 200}
 }
 
 func registerHttpHandler(method HttpMethod, pathPrefix string, handler HttpHandler) {
@@ -101,7 +101,7 @@ func (res HttpResponse) build() []byte {
 
 	var response [][]byte
 
-	response = append(response, []byte(fmt.Sprintf("HTTP/1.1 %d %s", res.ResponseCode, RES_CODE_TO_STATEMENT[res.ResponseCode])))
+	response = append(response, []byte(fmt.Sprintf("HTTP/1.1 %d %s", res.StatusCode, STATUS_CODE_TO_MESSAGE[res.StatusCode])))
 	response = append(response, headers...)
 	response = append(response, []byte(ContentSeparator))
 	response = append(response, res.Content)

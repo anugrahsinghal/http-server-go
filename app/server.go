@@ -38,21 +38,28 @@ func registerPaths() {
 }
 
 func handleConnection(conn net.Conn) {
+	defer conn.Close()
+
 	request := make([]byte, 1024)
 	_, err := conn.Read(request)
-	defer conn.Close()
+	if err != nil {
+		log.Println("Failed to read request: ", err.Error())
+		return
+	}
 
 	httpRequest := parseHttpRequest(request)
 	log.Printf("httpRequest--Data: ---------->>> %v\n\n", httpRequest)
 
+	var response HttpResponse
+
 	dispatch, err := getDispatch(httpRequest)
 	if err != nil {
 		log.Println("Dispatch error occurred: ", err.Error())
-		conn.Write(HttpResponse{ResponseCode: 404}.build())
+		response = HttpResponse{StatusCode: 404}
 		return
+	} else {
+		response = dispatch.Handle(httpRequest)
 	}
-
-	response := dispatch.Handle(httpRequest)
 
 	conn.Write(response.build())
 }
@@ -64,7 +71,7 @@ func (h FileCreationHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	err := os.WriteFile(filePathAbs, httpRequest.Content, os.ModePerm)
 	handleErr(err)
 
-	return HttpResponse{ResponseCode: 201}
+	return HttpResponse{StatusCode: 201}
 }
 
 type FileReadHandler struct{}
@@ -75,13 +82,13 @@ func (h FileReadHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	fileContent, err := os.ReadFile(filePathAbs)
 	if err != nil {
 		log.Println("error occurred: ", err.Error())
-		return HttpResponse{ResponseCode: 404}
+		return HttpResponse{StatusCode: 404}
 	}
 
 	return HttpResponse{
-		ResponseCode: 200,
-		Headers:      map[Header]string{ContentType: "application/octet-stream"},
-		Content:      fileContent,
+		StatusCode: 200,
+		Headers:    map[Header]string{ContentType: "application/octet-stream"},
+		Content:    fileContent,
 	}
 }
 
@@ -93,9 +100,9 @@ func (h UserAgentHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	}
 
 	return HttpResponse{
-		ResponseCode: 200,
-		Headers:      map[Header]string{ContentType: "text/plain"},
-		Content:      []byte(httpRequest.Headers[UserAgent]),
+		StatusCode: 200,
+		Headers:    map[Header]string{ContentType: "text/plain"},
+		Content:    []byte(httpRequest.Headers[UserAgent]),
 	}
 }
 
@@ -104,9 +111,9 @@ type EchoHandler struct{}
 func (h EchoHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	content := strings.TrimPrefix(httpRequest.StartLine.Path, "/echo/")
 	return HttpResponse{
-		ResponseCode: 200,
-		Headers:      map[Header]string{ContentType: "text/plain"},
-		Content:      []byte(content),
+		StatusCode: 200,
+		Headers:    map[Header]string{ContentType: "text/plain"},
+		Content:    []byte(content),
 	}
 }
 
