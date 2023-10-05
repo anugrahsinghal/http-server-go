@@ -48,7 +48,7 @@ func handleConnection(conn net.Conn) {
 	dispatch, err := getDispatch(httpRequest)
 	if err != nil {
 		log.Println("Dispatch error occurred: ", err.Error())
-		conn.Write([]byte(("HTTP/1.1 404 NOT FOUND\r\n\r\n")))
+		conn.Write(HttpResponse{ResponseCode: 404}.build())
 		return
 	}
 
@@ -62,7 +62,7 @@ func handleFileCreation(httpRequest HttpRequest) []byte {
 	err := os.WriteFile(filePathAbs, httpRequest.Content, os.ModePerm)
 	handleErr(err)
 
-	return []byte("HTTP/1.1 201 CREATED\r\n\r\n")
+	return HttpResponse{ResponseCode: 201}.build()
 }
 
 func handleFileRead(httpRequest HttpRequest) []byte {
@@ -71,7 +71,7 @@ func handleFileRead(httpRequest HttpRequest) []byte {
 	fileContent, err := os.ReadFile(filePathAbs)
 	if err != nil {
 		log.Println("error occurred: ", err.Error())
-		return []byte("HTTP/1.1 404 NOT FOUND\r\n\r\n")
+		return HttpResponse{ResponseCode: 404}.build()
 	}
 
 	return HttpResponse{

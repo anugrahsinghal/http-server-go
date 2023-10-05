@@ -31,6 +31,7 @@ var (
 	RES_CODE_TO_STATEMENT = map[int]string{
 		200: "OK",
 		201: "CREATED",
+		404: "NOT FOUND",
 	}
 	KNOWN_HEADERS = []Header{Host, UserAgent, AcceptEncoding, ContentType, ContentLength}
 )
@@ -46,7 +47,7 @@ func getDispatch(httpRequest HttpRequest) (func(httpRequest HttpRequest) []byte,
 	log.Printf("All Paths:: %v\n", HTTP_METHOD_PATHS[httpRequest.StartLine.HttpMethod])
 	if "/" == httpRequest.StartLine.Path { // reg-prefix=/files/ - path=/ - /files/ has /
 		return func(httpRequest HttpRequest) []byte {
-			return []byte(("HTTP/1.1 200 OK\r\n\r\n"))
+			return HttpResponse{ResponseCode: 200}.build()
 		}, nil
 	}
 	for registeredPrefix, dispatch := range HTTP_METHOD_PATHS[httpRequest.StartLine.HttpMethod] {
@@ -131,6 +132,9 @@ func (res HttpResponse) build() []byte {
 
 func (res HttpResponse) formatHeaders() [][]byte { // assuming res is of type response
 	var headers [][]byte
+	if _, ok := res.Headers[ContentType]; !ok && len(res.Content) > 0 {
+		panic("When Content present then Content-Type header is expected")
+	}
 
 	for header, value := range res.Headers {
 		if strings.EqualFold(string(header), string(ContentLength)) {
