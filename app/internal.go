@@ -33,7 +33,7 @@ var (
 		201: "CREATED",
 		404: "NOT FOUND",
 	}
-	KNOWN_HEADERS = []Header{Host, UserAgent, AcceptEncoding, ContentType, ContentLength}
+	KNOWN_HEADERS = map[Header]struct{}{Host: {}, UserAgent: {}, AcceptEncoding: {}, ContentType: {}, ContentLength: {}}
 )
 
 func registerHttpDispatch(method string, pathPrefix string, function func(httpRequest HttpRequest) []byte) {
@@ -107,6 +107,9 @@ func parseHeaders(requestData [][]byte) map[Header]string {
 	for i := 0; i < len(requestData); i++ {
 		log.Println("parseHeaders " + string(requestData[i]))
 		header := bytes.Split(requestData[i], []byte(": "))
+		if _, ok := KNOWN_HEADERS[Header(header[0])]; !ok {
+			log.Fatal(fmt.Sprintf("Unknown Header %v", header))
+		}
 		headers[Header(header[0])] = string(header[1])
 	}
 
