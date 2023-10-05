@@ -31,10 +31,10 @@ func main() {
 }
 
 func registerPaths() {
-	registerHttpDispatch("GET", "/echo/", echoResponse)
-	registerHttpDispatch("GET", "/user-agent", userAgent)
-	registerHttpDispatch("GET", "/files/", handleFileRead)
-	registerHttpDispatch("POST", "/files/", handleFileCreation)
+	registerHttpHandler(GET, "/echo/", EchoHandler{})
+	registerHttpHandler(GET, "/user-agent", UserAgentHandler{})
+	registerHttpHandler(GET, "/files/", FileReadHandler{})
+	registerHttpHandler(POST, "/files/", FileCreationHandler{})
 }
 
 func handleConnection(conn net.Conn) {
@@ -52,54 +52,62 @@ func handleConnection(conn net.Conn) {
 		return
 	}
 
-	response := dispatch(httpRequest)
+	response := dispatch.Handle(httpRequest)
 
-	conn.Write(response)
+	conn.Write(response.build())
 }
 
-func handleFileCreation(httpRequest HttpRequest) []byte {
+type FileCreationHandler struct{}
+
+func (h FileCreationHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(httpRequest.StartLine.Path, "/files/"))
 	err := os.WriteFile(filePathAbs, httpRequest.Content, os.ModePerm)
 	handleErr(err)
 
-	return HttpResponse{ResponseCode: 201}.build()
+	return HttpResponse{ResponseCode: 201}
 }
 
-func handleFileRead(httpRequest HttpRequest) []byte {
+type FileReadHandler struct{}
+
+func (h FileReadHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	filePath := strings.TrimPrefix(httpRequest.StartLine.Path, "/files/")
 	filePathAbs := path.Join(os.Args[2], filePath)
 	fileContent, err := os.ReadFile(filePathAbs)
 	if err != nil {
 		log.Println("error occurred: ", err.Error())
-		return HttpResponse{ResponseCode: 404}.build()
+		return HttpResponse{ResponseCode: 404}
 	}
 
 	return HttpResponse{
 		ResponseCode: 200,
 		Headers:      map[Header]string{ContentType: "application/octet-stream"},
 		Content:      fileContent,
-	}.build()
+	}
 }
 
-func userAgent(httpRequest HttpRequest) []byte {
+type UserAgentHandler struct{}
+
+func (h UserAgentHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	if _, ok := httpRequest.Headers[UserAgent]; !ok {
-		return []byte{}
+		return HttpResponse{}
 	}
 
 	return HttpResponse{
 		ResponseCode: 200,
 		Headers:      map[Header]string{ContentType: "text/plain"},
 		Content:      []byte(httpRequest.Headers[UserAgent]),
-	}.build()
+	}
 }
 
-func echoResponse(httpRequest HttpRequest) []byte {
+type EchoHandler struct{}
+
+func (h EchoHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	content := strings.TrimPrefix(httpRequest.StartLine.Path, "/echo/")
 	return HttpResponse{
 		ResponseCode: 200,
 		Headers:      map[Header]string{ContentType: "text/plain"},
 		Content:      []byte(content),
-	}.build()
+	}
 }
 
 func handleErr(err error) {

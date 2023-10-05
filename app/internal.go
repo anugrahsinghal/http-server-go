@@ -10,6 +10,7 @@ import (
 )
 
 type Header string
+type HttpMethod string
 
 const (
 	Host           = Header("Host")
@@ -19,36 +20,49 @@ const (
 	ContentLength  = Header("Content-Length")
 )
 const (
+	GET  = HttpMethod("GET")
+	POST = HttpMethod("POST")
+)
+const (
 	LineSeparator    = "\r\n"
 	ContentSeparator = ""
 )
 
 var (
-	HTTP_METHOD_PATHS = map[string]map[string]func(httpRequest HttpRequest) []byte{
-		"GET":  make(map[string]func(httpRequest HttpRequest) []byte),
-		"POST": make(map[string]func(httpRequest HttpRequest) []byte),
+	HTTP_METHOD_PATHS = map[HttpMethod]map[string]HttpHandler{
+		GET:  make(map[string]HttpHandler),
+		POST: make(map[string]HttpHandler),
 	}
 	RES_CODE_TO_STATEMENT = map[int]string{
 		200: "OK",
 		201: "CREATED",
 		404: "NOT FOUND",
 	}
-	KNOWN_HEADERS = map[Header]struct{}{Host: {}, UserAgent: {}, AcceptEncoding: {}, ContentType: {}, ContentLength: {}}
+	KNOWN_HEADERS          = map[Header]struct{}{Host: {}, UserAgent: {}, AcceptEncoding: {}, ContentType: {}, ContentLength: {}}
+	SUPPORTED_HTTP_METHODS = map[HttpMethod]struct{}{GET: {}, POST: {}}
 )
 
-func registerHttpDispatch(method string, pathPrefix string, function func(httpRequest HttpRequest) []byte) {
+type HttpHandler interface {
+	Handle(httpRequest HttpRequest) HttpResponse
+}
+
+type DefaultHandler struct{}
+
+func (h DefaultHandler) Handle(HttpRequest) HttpResponse {
+	return HttpResponse{ResponseCode: 200}
+}
+
+func registerHttpHandler(method HttpMethod, pathPrefix string, handler HttpHandler) {
 	if _, ok := HTTP_METHOD_PATHS[method][pathPrefix]; ok {
 		panic("CANNOT REGISTER ALREADY REGISTERED PATH FOR METHOD " + method)
 	}
-	HTTP_METHOD_PATHS[method][pathPrefix] = function
+	HTTP_METHOD_PATHS[method][pathPrefix] = handler
 }
 
-func getDispatch(httpRequest HttpRequest) (func(httpRequest HttpRequest) []byte, error) {
+func getDispatch(httpRequest HttpRequest) (HttpHandler, error) {
 	log.Printf("All Paths:: %v\n", HTTP_METHOD_PATHS[httpRequest.StartLine.HttpMethod])
 	if "/" == httpRequest.StartLine.Path { // reg-prefix=/files/ - path=/ - /files/ has /
-		return func(httpRequest HttpRequest) []byte {
-			return HttpResponse{ResponseCode: 200}.build()
-		}, nil
+		return DefaultHandler{}, nil
 	}
 	for registeredPrefix, dispatch := range HTTP_METHOD_PATHS[httpRequest.StartLine.HttpMethod] {
 		log.Printf("Compare Registered Path %s to %s \n", registeredPrefix, httpRequest.StartLine.Path)
@@ -95,8 +109,11 @@ func parseStartLine(line []byte) StartLine {
 	if len(items) != 3 {
 		log.Fatal("Expect 'HTTP_METHOD<space>PATH<space>HTTP_VERSION'")
 	}
+	if _, ok := SUPPORTED_HTTP_METHODS[HttpMethod(items[0])]; !ok {
+		log.Fatal(fmt.Sprintf("Only supports %v", SUPPORTED_HTTP_METHODS))
+	}
 	return StartLine{
-		HttpMethod:  items[0],
+		HttpMethod:  HttpMethod(items[0]),
 		Path:        items[1],
 		HttpVersion: items[2],
 	}
@@ -163,7 +180,7 @@ type HttpRequest struct {
 }
 
 type StartLine struct {
-	HttpMethod  string
+	HttpMethod  HttpMethod
 	Path        string
 	HttpVersion string
 }
