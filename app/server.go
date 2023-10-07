@@ -26,7 +26,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		go handleConnection(connection)
+		go handleRequest(connection)
 	}
 }
 
@@ -37,7 +37,7 @@ func registerPaths() {
 	registerHttpHandler(POST, "/files/", FileCreationHandler{})
 }
 
-func handleConnection(conn net.Conn) {
+func handleRequest(conn net.Conn) {
 	defer conn.Close()
 
 	request := make([]byte, 1024)
@@ -65,7 +65,7 @@ func handleConnection(conn net.Conn) {
 
 type FileCreationHandler struct{}
 
-func (h FileCreationHandler) Handle(httpRequest HttpRequest) HttpResponse {
+func (FileCreationHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	filePathAbs := path.Join(os.Args[2], strings.TrimPrefix(httpRequest.StartLine.Path, "/files/"))
 	err := os.WriteFile(filePathAbs, httpRequest.Content, os.ModePerm)
 	handleErr(err)
@@ -75,7 +75,7 @@ func (h FileCreationHandler) Handle(httpRequest HttpRequest) HttpResponse {
 
 type FileReadHandler struct{}
 
-func (h FileReadHandler) Handle(httpRequest HttpRequest) HttpResponse {
+func (FileReadHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	filePath := strings.TrimPrefix(httpRequest.StartLine.Path, "/files/")
 	filePathAbs := path.Join(os.Args[2], filePath)
 	fileContent, err := os.ReadFile(filePathAbs)
@@ -93,7 +93,7 @@ func (h FileReadHandler) Handle(httpRequest HttpRequest) HttpResponse {
 
 type UserAgentHandler struct{}
 
-func (h UserAgentHandler) Handle(httpRequest HttpRequest) HttpResponse {
+func (UserAgentHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	if _, ok := httpRequest.Headers[UserAgent]; !ok {
 		return HttpResponse{}
 	}
@@ -107,7 +107,7 @@ func (h UserAgentHandler) Handle(httpRequest HttpRequest) HttpResponse {
 
 type EchoHandler struct{}
 
-func (h EchoHandler) Handle(httpRequest HttpRequest) HttpResponse {
+func (EchoHandler) Handle(httpRequest HttpRequest) HttpResponse {
 	content := strings.TrimPrefix(httpRequest.StartLine.Path, "/echo/")
 	return HttpResponse{
 		StatusCode: 200,
